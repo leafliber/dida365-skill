@@ -1,6 +1,6 @@
 ---
 name: dida365
-description: Manage tasks in Dida365 (滴答清单). Use this skill when the user wants to create, view, update, complete, delete, or filter tasks in Dida365. Also handles project operations. Triggers on mentions of '滴答清单', 'Dida365', 'TickTick', '滴答', or task management requests when the user uses Dida365.
+description: Manage tasks in Dida365 (滴答清单). Use this skill when the user wants to create, view, update, complete, delete, or filter tasks in Dida365. Triggers on mentions of '滴答清单', 'Dida365', 'TickTick', '滴答', or task management requests when the user uses Dida365.
 license: MIT
 ---
 
@@ -8,74 +8,99 @@ license: MIT
 
 Manage tasks and projects in Dida365 (滴答清单) via OpenAPI.
 
-## Prerequisites
+## Quick Start
 
-Before using this skill, the user must have:
+### 1. Configure Credentials
 
-1. **Dida365 account** - Registered at dida365.com
-2. **OAuth credentials** - Obtained from [Dida365 Developer Center](https://developer.dida365.com/manage)
-   - `client_id`
-   - `client_secret`
-3. **Access token** - Obtained via OAuth2 flow
-
-### Configuration
-
-Store credentials in environment variables or a config file:
+Set environment variables:
 
 ```bash
-export DIDA_ACCESS_TOKEN="your-access-token"
+export DIDA_CLIENT_ID="your-client-id"
+export DIDA_CLIENT_SECRET="your-client-secret"
 ```
 
-Or create a config file at `~/.dida365/config.json`:
+Get credentials from [Dida365 Developer Center](https://developer.dida365.com/manage).
 
-```json
-{
-  "access_token": "your-access-token"
-}
+### 2. Authenticate
+
+First time usage will trigger OAuth flow automatically, or run:
+
+```bash
+python scripts/dida_api.py auth
 ```
 
-## Quick Reference
+This opens a browser for authorization, then saves the token locally.
 
-### Task Operations
+### 3. Use the API
 
-| Action | Command |
-|--------|---------|
-| List projects | `dida_api.py projects` |
-| Get project tasks | `dida_api.py project-data <projectId>` |
-| Create task | `dida_api.py create-task --title "..." --project-id <id>` |
-| Get task | `dida_api.py get-task <projectId> <taskId>` |
-| Update task | `dida_api.py update-task <taskId> --title "..."` |
-| Complete task | `dida_api.py complete-task <projectId> <taskId>` |
-| Delete task | `dida_api.py delete-task <projectId> <taskId>` |
-| Filter tasks | `dida_api.py filter-tasks --project-ids <id1,id2>` |
-| Completed tasks | `dida_api.py completed-tasks --project-ids <id1,id2>` |
-| Move task | `dida_api.py move-task <taskId> <fromProjectId> <toProjectId>` |
+```bash
+# List projects
+python scripts/dida_api.py projects
 
-### Project Operations
+# Create task
+python scripts/dida_api.py create-task --title "Review report" --project-id "inbox"
 
-| Action | Command |
-|--------|---------|
-| List all projects | `dida_api.py projects` |
-| Get project info | `dida_api.py project <projectId>` |
-| Create project | `dida_api.py create-project --name "..."` |
-| Delete project | `dida_api.py delete-project <projectId>` |
+# Complete task
+python scripts/dida_api.py complete-task <projectId> <taskId>
+```
 
-## Task Properties
+## Commands Reference
 
-| Field | Type | Description |
-|-------|------|-------------|
-| title | string | Task title (required for creation) |
-| projectId | string | Project ID (required) |
-| content | string | Task content/notes |
-| desc | string | Description for checklist items |
-| startDate | datetime | Start date (format: `yyyy-MM-dd'T'HH:mm:ssZ`) |
-| dueDate | datetime | Due date |
-| priority | int | 0=None, 1=Low, 3=Medium, 5=High |
-| isAllDay | bool | All-day task |
-| timeZone | string | e.g., "Asia/Shanghai" |
-| reminders | list | Reminder triggers |
-| repeatFlag | string | RRULE format for recurring tasks |
-| items | list | Subtasks/checklist items |
+### Authentication
+
+| Command | Description |
+|---------|-------------|
+| `auth` | Run OAuth flow to get access token |
+| `auth-status` | Check authentication status |
+| `logout` | Clear saved credentials |
+
+### Projects
+
+| Command | Description |
+|---------|-------------|
+| `projects` | List all projects |
+| `project <id>` | Get project info |
+| `project-data <id>` | Get project with tasks |
+| `create-project --name "..."` | Create a project |
+| `delete-project <id>` | Delete a project |
+
+### Tasks
+
+| Command | Description |
+|---------|-------------|
+| `create-task --title "..." --project-id <id>` | Create a task |
+| `get-task <projectId> <taskId>` | Get task details |
+| `update-task <taskId> --project-id <id> [options]` | Update a task |
+| `complete-task <projectId> <taskId>` | Mark task complete |
+| `delete-task <projectId> <taskId>` | Delete a task |
+| `move-task <taskId> <fromProjectId> <toProjectId>` | Move task |
+| `filter-tasks [options]` | Filter tasks |
+| `completed-tasks [options]` | List completed tasks |
+
+## Task Options
+
+| Option | Description |
+|--------|-------------|
+| `--title` | Task title |
+| `--project-id` | Project ID (required, use "inbox" for inbox) |
+| `--content` | Task content/notes |
+| `--due-date` | Due date (format: `YYYY-MM-DDTHH:mm:ss+ZZZZ`) |
+| `--start-date` | Start date |
+| `--priority` | 0=None, 1=Low, 3=Medium, 5=High |
+| `--is-all-day` | All-day task |
+| `--time-zone` | Time zone (e.g., Asia/Shanghai) |
+| `--tags` | Comma-separated tags |
+
+## Filter Options
+
+| Option | Description |
+|--------|-------------|
+| `--project-ids` | Comma-separated project IDs |
+| `--start-date` | Filter start date |
+| `--end-date` | Filter end date |
+| `--priority` | Comma-separated priorities (0,1,3,5) |
+| `--tags` | Comma-separated tags |
+| `--status` | Comma-separated status (0=open, 2=completed) |
 
 ## Priority Values
 
@@ -84,22 +109,9 @@ Or create a config file at `~/.dida365/config.json`:
 - `3` - Medium
 - `5` - High
 
-## Task Status
+## Examples
 
-- `0` - Normal (incomplete)
-- `2` - Completed
-
-## Common Workflows
-
-### Create a Simple Task
-
-```bash
-python scripts/dida_api.py create-task \
-  --title "Review quarterly report" \
-  --project-id "inbox"
-```
-
-### Create Task with Due Date and Priority
+### Create a Task with Due Date
 
 ```bash
 python scripts/dida_api.py create-task \
@@ -109,53 +121,50 @@ python scripts/dida_api.py create-task \
   --priority 3
 ```
 
-### Filter Tasks by Tags
+### Filter High Priority Tasks
 
 ```bash
 python scripts/dida_api.py filter-tasks \
   --project-ids "project1,project2" \
-  --tags "urgent,work"
+  --priority "3,5"
 ```
 
 ### Get Today's Tasks
 
-1. List all projects to get project IDs
-2. Filter tasks with date range for today
+```bash
+python scripts/dida_api.py filter-tasks \
+  --start-date "$(date +%Y-%m-%dT00:00:00%z)" \
+  --end-date "$(date +%Y-%m-%dT23:59:59%z)"
+```
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DIDA_CLIENT_ID` | Yes | OAuth client ID |
+| `DIDA_CLIENT_SECRET` | Yes | OAuth client secret |
+| `DIDA_REDIRECT_PORT` | No | Local OAuth callback port (default: 8765) |
+
+### Config File
+
+Token is cached at `~/.dida365/token.json` after authentication.
 
 ## Error Handling
 
-The API returns standard HTTP status codes:
-
-- `200` - Success
-- `201` - Created
-- `401` - Unauthorized (check access token)
-- `403` - Forbidden (insufficient permissions)
-- `404` - Not Found (invalid ID)
-
-## OAuth2 Flow
-
-If the user needs to obtain an access token:
-
-1. Direct user to authorization URL:
-   ```
-   https://dida365.com/oauth/authorize?scope=tasks:read%20tasks:write&client_id=YOUR_CLIENT_ID&state=random_state&redirect_uri=YOUR_REDIRECT_URI&response_type=code
-   ```
-
-2. User grants access, receives callback with `code`
-
-3. Exchange code for token:
-   ```bash
-   curl -X POST https://dida365.com/oauth/token \
-     -H "Content-Type: application/x-www-form-urlencoded" \
-     -u "client_id:client_secret" \
-     -d "code=AUTH_CODE&grant_type=authorization_code&scope=tasks:read tasks:write&redirect_uri=YOUR_REDIRECT_URI"
-   ```
-
-4. Store the `access_token` from response
+| Code | Meaning | Action |
+|------|---------|--------|
+| 401 | Unauthorized | Re-run `auth` command |
+| 403 | Forbidden | Check permissions |
+| 404 | Not Found | Verify project/task ID |
 
 ## Notes
 
-- "inbox" is a special projectId representing the user's inbox
-- All dates use ISO 8601 format with timezone
-- The API base URL is `https://api.dida365.com/open/v1/`
-- For detailed API reference, see `references/api_reference.md`
+- "inbox" is a special projectId for the user's inbox
+- Dates use ISO 8601 format with timezone
+- API base URL: `https://api.dida365.com/open/v1/`
+
+## Detailed Reference
+
+See [references/api_reference.md](references/api_reference.md) for complete API documentation.

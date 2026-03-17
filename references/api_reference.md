@@ -10,51 +10,93 @@ https://api.dida365.com/open/v1
 
 ## Authentication
 
-All API requests require an OAuth2 access token in the Authorization header:
+### Automatic OAuth Flow
 
-```
-Authorization: Bearer {access_token}
-```
-
-### OAuth2 Flow
-
-#### Step 1: Get Authorization Code
-
-Redirect user to:
-
-```
-https://dida365.com/oauth/authorize?scope=tasks:read%20tasks:write&client_id={client_id}&state={state}&redirect_uri={redirect_uri}&response_type=code
-```
-
-Parameters:
-| Name | Required | Description |
-|------|----------|-------------|
-| client_id | Yes | Application unique ID |
-| scope | Yes | `tasks:read tasks:write` |
-| state | No | Passed to redirect URL as is |
-| redirect_uri | Yes | User-configured redirect URL |
-| response_type | Yes | Fixed as `code` |
-
-#### Step 2: Exchange Code for Token
-
-POST to `https://dida365.com/oauth/token`:
+This skill handles OAuth authentication automatically. You only need to set:
 
 ```bash
-curl -X POST https://dida365.com/oauth/token \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -u "client_id:client_secret" \
-  -d "code={code}&grant_type=authorization_code&scope=tasks:read tasks:write&redirect_uri={redirect_uri}"
+export DIDA_CLIENT_ID="your-client-id"
+export DIDA_CLIENT_SECRET="your-client-secret"
 ```
 
-Response:
+Then run:
+
+```bash
+python scripts/dida_api.py auth
+```
+
+The script will:
+1. Start a local HTTP server (port 8765 by default)
+2. Open your browser to the Dida365 authorization page
+3. Wait for you to authorize
+4. Automatically exchange the code for tokens
+5. Save tokens to `~/.dida365/token.json`
+
+### Getting OAuth Credentials
+
+1. Visit [Dida365 Developer Center](https://developer.dida365.com/manage)
+2. Create a new application
+3. Set redirect URI to: `http://127.0.0.1:8765/callback`
+   - You can change the port with `DIDA_REDIRECT_PORT` environment variable
+4. Note your `client_id` and `client_secret`
+
+### OAuth URLs
+
+| URL | Description |
+|-----|-------------|
+| `https://dida365.com/oauth/authorize` | Authorization endpoint |
+| `https://dida365.com/oauth/token` | Token endpoint |
+
+### OAuth Parameters
+
+**Authorization Request:**
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| client_id | Yes | Application unique ID |
+| redirect_uri | Yes | Must match configured redirect URI |
+| response_type | Yes | Fixed as `code` |
+| scope | Yes | `tasks:read tasks:write projects:read projects:write` |
+| state | Recommended | CSRF protection token |
+
+**Token Request:**
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| code | Yes | Authorization code from callback |
+| grant_type | Yes | `authorization_code` |
+| redirect_uri | Yes | Same as authorization request |
+| scope | Yes | Same as authorization request |
+
+### Token Response
+
 ```json
 {
   "access_token": "your-access-token",
   "token_type": "Bearer",
   "expires_in": 3600,
-  "refresh_token": "refresh-token"
+  "refresh_token": "your-refresh-token"
 }
 ```
+
+### Token Storage
+
+Tokens are stored in `~/.dida365/token.json`:
+
+```json
+{
+  "access_token": "...",
+  "refresh_token": "...",
+  "expires_in": 3600,
+  "token_type": "Bearer",
+  "created_at": 1710000000.0,
+  "client_id": "your-client-id"
+}
+```
+
+### Token Refresh
+
+The script automatically refreshes tokens when expired using the refresh token.
 
 ---
 
@@ -148,6 +190,12 @@ POST /task/{taskId}
 POST /project/{projectId}/task/{taskId}/complete
 ```
 
+### Uncomplete Task
+
+```http
+POST /project/{projectId}/task/{taskId}/uncomplete
+```
+
 ### Delete Task
 
 ```http
@@ -200,7 +248,8 @@ POST /task/completed
 {
   "projectIds": ["project-id"],
   "startDate": "2024-03-01T00:00:00.000+0000",
-  "endDate": "2024-03-31T23:59:59.000+0000"
+  "endDate": "2024-03-31T23:59:59.000+0000",
+  "limit": 50
 }
 ```
 
@@ -372,13 +421,15 @@ Example: `2019-11-13T03:00:00+0000`
 
 ## Error Responses
 
-| HTTP Code | Description |
-|-----------|-------------|
-| 200 | OK |
-| 201 | Created |
-| 401 | Unauthorized - check access token |
-| 403 | Forbidden - insufficient permissions |
-| 404 | Not Found - invalid ID |
+| HTTP Code | Description | Action |
+|-----------|-------------|--------|
+| 200 | OK | Success |
+| 201 | Created | Success |
+| 204 | No Content | Success (no response body) |
+| 400 | Bad Request | Check request parameters |
+| 401 | Unauthorized | Re-authenticate |
+| 403 | Forbidden | Check permissions |
+| 404 | Not Found | Verify ID exists |
 
 ---
 
