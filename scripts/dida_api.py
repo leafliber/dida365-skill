@@ -44,7 +44,7 @@ TOKEN_FILE = CONFIG_DIR / "token.json"
 
 # OAuth Configuration
 DEFAULT_REDIRECT_PORT = 8765
-OAUTH_SCOPE = "tasks:read tasks:write projects:read projects:write"
+OAUTH_SCOPE = "tasks:read tasks:write"
 
 
 def get_client_credentials() -> tuple[str, str]:
