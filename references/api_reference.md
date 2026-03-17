@@ -10,42 +10,88 @@ https://api.dida365.com/open/v1
 
 ## Authentication
 
-### Automatic OAuth Flow
+### Step-by-Step OAuth Flow
 
-This skill handles OAuth authentication automatically. You only need to set:
+#### Step 1: Create OAuth Application
+
+1. Visit [Dida365 Developer Center](https://developer.dida365.com/manage)
+2. Click "创建应用" (Create Application)
+3. Fill in application name
+4. **Important:** Set Redirect URI to:
+   ```
+   http://127.0.0.1:8765/callback
+   ```
+   - You can change the port with `DIDA_REDIRECT_PORT` environment variable
+   - Make sure the redirect URI is **exactly** as configured, including protocol (`http://`)
+5. Save and note your `client_id` and `client_secret`
+
+#### Step 2: Configure Environment Variables
 
 ```bash
 export DIDA_CLIENT_ID="your-client-id"
 export DIDA_CLIENT_SECRET="your-client-secret"
 ```
 
-Then run:
-
+Optional: Change the local callback port
 ```bash
-python scripts/dida_api.py auth
+export DIDA_REDIRECT_PORT="8765"  # default is 8765
 ```
 
-The script will:
-1. Start a local HTTP server (port 8765 by default)
-2. Open your browser to the Dida365 authorization page
-3. Wait for you to authorize
-4. Automatically exchange the code for tokens
-5. Save tokens to `~/.dida365/token.json`
+#### Step 3: Get Authorization URL
 
-### Getting OAuth Credentials
+Run the following command to print the authorization URL:
 
-1. Visit [Dida365 Developer Center](https://developer.dida365.com/manage)
-2. Create a new application
-3. Set redirect URI to: `http://127.0.0.1:8765/callback`
-   - You can change the port with `DIDA_REDIRECT_PORT` environment variable
-4. Note your `client_id` and `client_secret`
+```bash
+python scripts/dida_api.py auth-url
+```
 
-### OAuth URLs
+Or construct manually (replace `{client_id}`):
 
-| URL | Description |
-|-----|-------------|
-| `https://dida365.com/oauth/authorize` | Authorization endpoint |
-| `https://dida365.com/oauth/token` | Token endpoint |
+```
+https://dida365.com/oauth/authorize?client_id={client_id}&redirect_uri=http://127.0.0.1:8765/callback&response_type=code&scope=tasks:read%20tasks:write
+```
+
+#### Step 4: Authorize the Application
+
+1. Open the authorization URL in your browser
+2. Log in to your Dida365 account
+3. Click "允许" (Allow) to authorize
+4. You will be redirected to a URL like:
+   ```
+   http://127.0.0.1:8765/callback?code=xxxxxxxx
+   ```
+   Note: The browser may show "Cannot reach this page" because there's no local server - this is expected.
+
+5. **Copy the `code` parameter** from the URL
+
+#### Step 5: Exchange Code for Access Token
+
+Run the exchange command with the authorization code:
+
+```bash
+python scripts/dida_api.py exchange-code --code "YOUR_AUTH_CODE"
+```
+
+The token will be automatically saved to `~/.dida365/token.json`.
+
+#### Step 6: Verify Authentication
+
+```bash
+python scripts/dida_api.py auth-status
+```
+
+Or test by listing projects:
+
+```bash
+python scripts/dida_api.py projects
+```
+
+### OAuth Endpoints
+
+| Endpoint | URL |
+|----------|-----|
+| Authorization | `https://dida365.com/oauth/authorize` |
+| Token | `https://dida365.com/oauth/token` |
 
 ### OAuth Parameters
 
@@ -54,10 +100,14 @@ The script will:
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | client_id | Yes | Application unique ID |
-| redirect_uri | Yes | Must match configured redirect URI |
+| redirect_uri | Yes | Must match configured redirect URI exactly |
 | response_type | Yes | Fixed as `code` |
-| scope | Yes | `tasks:read tasks:write projects:read projects:write` |
-| state | Recommended | CSRF protection token |
+| scope | Yes | Must be `tasks:read tasks:write` |
+
+**Important Notes:**
+- Scope `projects:read` and `projects:write` are **NOT supported**
+- Only use `tasks:read tasks:write`
+- The redirect URI must be pre-registered in the developer center
 
 **Token Request:**
 
@@ -66,16 +116,28 @@ The script will:
 | code | Yes | Authorization code from callback |
 | grant_type | Yes | `authorization_code` |
 | redirect_uri | Yes | Same as authorization request |
-| scope | Yes | Same as authorization request |
+| scope | Yes | `tasks:read tasks:write` |
+
+**Authorization Header:**
+
+The token request requires Basic authentication with client credentials:
+
+```bash
+# Encode client_id:client_secret in Base64
+echo -n "client_id:client_secret" | base64
+
+# Use in Authorization header
+Authorization: Basic {base64_encoded_credentials}
+```
 
 ### Token Response
 
 ```json
 {
   "access_token": "your-access-token",
-  "token_type": "Bearer",
-  "expires_in": 3600,
-  "refresh_token": "your-refresh-token"
+  "token_type": "bearer",
+  "expires_in": 15551999,
+  "scope": "tasks:read tasks:write"
 }
 ```
 
@@ -86,17 +148,20 @@ Tokens are stored in `~/.dida365/token.json`:
 ```json
 {
   "access_token": "...",
-  "refresh_token": "...",
-  "expires_in": 3600,
-  "token_type": "Bearer",
-  "created_at": 1710000000.0,
+  "expires_in": 15551999,
+  "token_type": "bearer",
+  "created_at": 1773754134.555,
   "client_id": "your-client-id"
 }
 ```
 
-### Token Refresh
+File permissions are set to `600` (owner read/write only) for security.
 
-The script automatically refreshes tokens when expired using the refresh token.
+### Token Expiry
+
+- Tokens are valid for approximately **179 days** (about 6 months)
+- The skill automatically handles token refresh if a refresh token is available
+- If you get a 401 error, re-run the authorization flow
 
 ---
 

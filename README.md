@@ -1,23 +1,26 @@
 # Dida365 Skill
 
-Agent Skill for managing tasks in Dida365 (滴答清单) via OpenAPI with automatic OAuth authentication.
+Agent Skill for managing tasks in Dida365 (滴答清单) via OpenAPI.
 
 ## Features
 
-- **Automatic OAuth Flow**: Just set client credentials, authentication is handled automatically
-- **Token Management**: Automatic token refresh and secure local storage
+- **Simple OAuth Flow**: Easy authorization with manual code exchange
 - **Full Task Management**: Create, read, update, complete, delete, and filter tasks
 - **Project Operations**: List, create, and manage projects
 - **Advanced Filtering**: Filter tasks by date, priority, tags, and status
 
 ## Quick Start
 
-### 1. Get OAuth Credentials
+### 1. Create OAuth Application
 
 1. Visit [Dida365 Developer Center](https://developer.dida365.com/manage)
-2. Create a new application
-3. Set redirect URI to: `http://127.0.0.1:8765/callback`
-4. Note your `client_id` and `client_secret`
+2. Click "创建应用" (Create Application)
+3. Fill in application name
+4. **Important:** Set Redirect URI to:
+   ```
+   http://127.0.0.1:8765/callback
+   ```
+5. Save and note your `client_id` and `client_secret`
 
 ### 2. Configure Environment
 
@@ -26,25 +29,41 @@ export DIDA_CLIENT_ID="your-client-id"
 export DIDA_CLIENT_SECRET="your-client-secret"
 ```
 
-### 3. Authenticate
+### 3. Get Authorization URL
 
 ```bash
-python scripts/dida_api.py auth
+python scripts/dida_api.py auth-url
 ```
 
-This opens a browser for authorization, then saves the token locally.
+Open the printed URL in your browser.
 
-### 4. Use the API
+### 4. Authorize and Get Code
+
+1. Log in to your Dida365 account
+2. Click "允许" (Allow) to authorize
+3. You'll be redirected to a URL like:
+   ```
+   http://127.0.0.1:8765/callback?code=xxxxxxxx
+   ```
+4. Copy the `code` parameter
+
+### 5. Exchange Code for Token
 
 ```bash
+python scripts/dida_api.py exchange-code --code "YOUR_CODE"
+```
+
+### 6. Verify and Use
+
+```bash
+# Check authentication
+python scripts/dida_api.py auth-status
+
 # List projects
 python scripts/dida_api.py projects
 
-# Create task
-python scripts/dida_api.py create-task --title "Review report" --project-id "inbox"
-
-# Complete task
-python scripts/dida_api.py complete-task <projectId> <taskId>
+# Create a task
+python scripts/dida_api.py create-task --title "My task" --project-id "inbox"
 ```
 
 ## Commands Reference
@@ -53,7 +72,8 @@ python scripts/dida_api.py complete-task <projectId> <taskId>
 
 | Command | Description |
 |---------|-------------|
-| `auth` | Run OAuth flow to get access token |
+| `auth-url` | Print the authorization URL |
+| `exchange-code --code CODE` | Exchange authorization code for token |
 | `auth-status` | Check authentication status |
 | `logout` | Clear saved credentials |
 
@@ -64,8 +84,6 @@ python scripts/dida_api.py complete-task <projectId> <taskId>
 | `projects` | List all projects |
 | `project <id>` | Get project info |
 | `project-data <id>` | Get project with tasks |
-| `create-project --name "..."` | Create a project |
-| `delete-project <id>` | Delete a project |
 
 ### Tasks
 
@@ -75,9 +93,7 @@ python scripts/dida_api.py complete-task <projectId> <taskId>
 | `get-task <projectId> <taskId>` | Get task details |
 | `update-task <taskId> --project-id <id> [options]` | Update a task |
 | `complete-task <projectId> <taskId>` | Mark task complete |
-| `uncomplete-task <projectId> <taskId>` | Mark task incomplete |
 | `delete-task <projectId> <taskId>` | Delete a task |
-| `move-task <taskId> <fromProjectId> <toProjectId>` | Move task |
 | `filter-tasks [options]` | Filter tasks |
 | `completed-tasks [options]` | List completed tasks |
 
@@ -86,25 +102,28 @@ python scripts/dida_api.py complete-task <projectId> <taskId>
 | Option | Description |
 |--------|-------------|
 | `--title` | Task title |
-| `--project-id` | Project ID (required, use "inbox" for inbox) |
+| `--project-id` | Project ID (use "inbox" for inbox) |
 | `--content` | Task content/notes |
 | `--due-date` | Due date (format: `YYYY-MM-DDTHH:mm:ss+ZZZZ`) |
-| `--start-date` | Start date |
 | `--priority` | 0=None, 1=Low, 3=Medium, 5=High |
-| `--is-all-day` | All-day task |
-| `--time-zone` | Time zone (e.g., Asia/Shanghai) |
 | `--tags` | Comma-separated tags |
 
-## Filter Options
+## Important Notes
 
-| Option | Description |
-|--------|-------------|
-| `--project-ids` | Comma-separated project IDs |
-| `--start-date` | Filter start date |
-| `--end-date` | Filter end date |
-| `--priority` | Comma-separated priorities (0,1,3,5) |
-| `--tags` | Comma-separated tags |
-| `--status` | Comma-separated status (0=open, 2=completed) |
+### OAuth Scope
+
+**Only these scopes are supported:**
+- `tasks:read`
+- `tasks:write`
+
+**NOT supported:**
+- `projects:read`
+- `projects:write`
+
+### Redirect URI
+
+The redirect URI must be **pre-registered** in the Dida365 Developer Center. Make sure it matches exactly:
+- `http://127.0.0.1:8765/callback` (not `localhost`)
 
 ## Configuration
 
@@ -114,32 +133,33 @@ python scripts/dida_api.py complete-task <projectId> <taskId>
 |----------|----------|-------------|
 | `DIDA_CLIENT_ID` | Yes | OAuth client ID |
 | `DIDA_CLIENT_SECRET` | Yes | OAuth client secret |
-| `DIDA_REDIRECT_PORT` | No | Local OAuth callback port (default: 8765) |
+| `DIDA_REDIRECT_PORT` | No | Local callback port (default: 8765) |
 
 ### Token Storage
 
-Tokens are securely stored in `~/.dida365/token.json` with file permissions 600.
+Tokens are stored in `~/.dida365/token.json` with file permissions 600.
+
+Token validity: approximately **179 days** (6 months).
 
 ## Examples
 
-### Create a High-Priority Task
+### Create a Task
 
 ```bash
 python scripts/dida_api.py create-task \
-  --title "Submit proposal" \
-  --project-id "work-project-id" \
+  --title "Submit report" \
+  --project-id "inbox" \
   --due-date "2024-03-15T18:00:00+0800" \
-  --priority 5 \
-  --tags "urgent,work"
+  --priority 3 \
+  --tags "work,urgent"
 ```
 
-### Filter Today's High-Priority Tasks
+### Filter Today's Tasks
 
 ```bash
 python scripts/dida_api.py filter-tasks \
   --start-date "$(date +%Y-%m-%dT00:00:00%z)" \
-  --end-date "$(date +%Y-%m-%dT23:59:59%z)" \
-  --priority "3,5"
+  --end-date "$(date +%Y-%m-%dT23:59:59%z)"
 ```
 
 ### Get Inbox Tasks
@@ -151,6 +171,24 @@ python scripts/dida_api.py project-data inbox
 ## API Reference
 
 See [references/api_reference.md](references/api_reference.md) for complete API documentation.
+
+## Troubleshooting
+
+### "At least one redirect_uri must be registered"
+
+Register the redirect URI in the Dida365 Developer Center:
+- URL: `http://127.0.0.1:8765/callback`
+
+### "Invalid scope"
+
+Only use `tasks:read tasks:write`. Other scopes are not supported.
+
+### 401 Unauthorized
+
+Your token may have expired. Re-run the authorization flow:
+1. `python scripts/dida_api.py auth-url`
+2. Open URL, authorize, get code
+3. `python scripts/dida_api.py exchange-code --code "YOUR_CODE"`
 
 ## License
 

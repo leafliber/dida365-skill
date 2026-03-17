@@ -10,26 +10,81 @@ Manage tasks and projects in Dida365 (滴答清单) via OpenAPI.
 
 ## Quick Start
 
-### 1. Configure Credentials
+### 1. Create OAuth Application
 
-Set environment variables:
+1. Visit [Dida365 Developer Center](https://developer.dida365.com/manage)
+2. Click "创建应用" (Create Application)
+3. Fill in application name
+4. **Important:** Set Redirect URI to:
+   ```
+   http://127.0.0.1:8765/callback
+   ```
+5. Save and note your `client_id` and `client_secret`
+
+### 2. Configure Environment
 
 ```bash
 export DIDA_CLIENT_ID="your-client-id"
 export DIDA_CLIENT_SECRET="your-client-secret"
 ```
 
-Get credentials from [Dida365 Developer Center](https://developer.dida365.com/manage).
+### 3. Authorize
 
-### 2. Authenticate
+Open the following URL in your browser (replace `{client_id}` with your actual client ID):
 
-First time usage will trigger OAuth flow automatically, or run:
-
-```bash
-python scripts/dida_api.py auth
+```
+https://dida365.com/oauth/authorize?client_id={client_id}&redirect_uri=http://127.0.0.1:8765/callback&response_type=code&scope=tasks:read%20tasks:write
 ```
 
-This opens a browser for authorization, then saves the token locally.
+**Authorization Steps:**
+1. Log in to your Dida365 account
+2. Click "允许" (Allow) to authorize the application
+3. You will be redirected to a URL like:
+   ```
+   http://127.0.0.1:8765/callback?code=xxxxxxxx
+   ```
+4. Copy the `code` parameter from the URL
+
+### 4. Exchange Code for Token
+
+Run the following command (replace `{code}` with the code from step 3):
+
+```bash
+python scripts/dida_api.py exchange-code --code "{code}"
+```
+
+Or manually exchange:
+
+```bash
+curl -X POST "https://dida365.com/oauth/token" \
+  -u "CLIENT_ID:CLIENT_SECRET" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "code=AUTH_CODE&grant_type=authorization_code&scope=tasks:read%20tasks:write&redirect_uri=http://127.0.0.1:8765/callback"
+```
+
+Save the returned `access_token` to `~/.dida365/token.json`:
+
+```json
+{
+  "access_token": "your-access-token",
+  "token_type": "bearer",
+  "expires_in": 15551999,
+  "created_at": 1773754134,
+  "client_id": "your-client-id"
+}
+```
+
+### 5. Verify Authentication
+
+```bash
+python scripts/dida_api.py auth-status
+```
+
+Or test directly:
+
+```bash
+python scripts/dida_api.py projects
+```
 
 ### 3. Use the API
 
