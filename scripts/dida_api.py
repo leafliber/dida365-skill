@@ -2,44 +2,21 @@
 """
 Dida365 (滴答清单) OpenAPI Client
 
-Simple OAuth flow with manual code exchange.
+Automatic OAuth flow - just set DIDA_CLIENT_ID and DIDA_CLIENT_SECRET.
 
-Quick Start:
-    1. Set environment variables:
-       export DIDA_CLIENT_ID="your-client-id"
-       export DIDA_CLIENT_SECRET="your-client-secret"
+Usage:
+    python dida_api.py auth              # Run OAuth flow
+    python dida_api.py auth-status       # Check authentication
+    python dida_api.py logout            # Clear credentials
 
-    2. Get authorization URL:
-       python dida_api.py auth-url
-
-    3. Open URL in browser, authorize, copy the 'code' from redirect URL
-
-    4. Exchange code for token:
-       python dida_api.py exchange-code --code "YOUR_CODE"
-
-    5. Use the API:
-       python dida_api.py projects
-       python dida_api.py create-task --title "My task" --project-id "inbox"
-
-Commands:
-    auth-url                     Print authorization URL
-    exchange-code --code CODE    Exchange code for access token
-    auth-status                  Check authentication status
-    logout                       Clear saved credentials
-
-    projects                     List all projects
-    project-data <id>            Get project with tasks
-    create-task ...              Create a task
-    filter-tasks ...             Filter tasks
-    complete-task <pid> <tid>    Mark task complete
+    python dida_api.py projects          # List projects
+    python dida_api.py create-task ...   # Create task
+    ...
 
 Environment Variables:
     DIDA_CLIENT_ID       - OAuth client ID (required)
     DIDA_CLIENT_SECRET   - OAuth client secret (required)
     DIDA_REDIRECT_PORT   - Local callback port (default: 8765)
-
-Note: Register redirect URI in Dida365 Developer Center:
-      http://127.0.0.1:8765/callback
 """
 
 import argparse
@@ -62,12 +39,16 @@ import secrets
 # API Configuration
 API_BASE_URL = "https://api.dida365.com/open/v1"
 OAUTH_BASE_URL = "https://dida365.com/oauth"
-CONFIG_DIR = Path.home() / ".dida365"
+
+# Token 存储路径 - 优先使用环境变量，默认使用 working 目录
+# 这样 token 会保存在持久化的 working 目录中，不会因容器重启丢失
+DIDA_CONFIG_DIR = os.environ.get("DIDA_CONFIG_DIR", "/app/working/.dida365")
+CONFIG_DIR = Path(DIDA_CONFIG_DIR)
 TOKEN_FILE = CONFIG_DIR / "token.json"
 
 # OAuth Configuration
 DEFAULT_REDIRECT_PORT = 8765
-OAUTH_SCOPE = "tasks:read tasks:write"
+OAUTH_SCOPE = "tasks:read tasks:write projects:read projects:write"
 
 
 def get_client_credentials() -> tuple[str, str]:
@@ -464,76 +445,6 @@ def cmd_logout(args):
         print("No token file to delete.")
 
 
-def cmd_exchange_code(args):
-    """Exchange authorization code for access token."""
-    client_id, client_secret = get_client_credentials()
-    redirect_uri = f"http://127.0.0.1:{get_redirect_port()}/callback"
-
-    credentials = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
-
-    body = urlencode({
-        "code": args.code,
-        "grant_type": "authorization_code",
-        "scope": OAUTH_SCOPE,
-        "redirect_uri": redirect_uri,
-    })
-
-    print("Exchanging authorization code for token...")
-
-    req = urllib.request.Request(
-        f"{OAUTH_BASE_URL}/token",
-        data=body.encode(),
-        headers={
-            "Authorization": f"Basic {credentials}",
-            "Content-Type": "application/x-www-form-urlencoded",
-        },
-        method="POST",
-    )
-
-    try:
-        with urllib.request.urlopen(req) as response:
-            token_data = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode("utf-8") if e.fp else ""
-        print(f"Error: Token exchange failed")
-        print(f"Response: {error_body}")
-        sys.exit(1)
-
-    # Save token
-    save_token(token_data, client_id)
-
-    print(f"\n✅ Authentication successful!")
-    print(f"   Token saved to: {TOKEN_FILE}")
-    print(f"   Expires in: {token_data.get('expires_in', 0) // 86400} days")
-
-    if args.show_token:
-        print(f"\n   Access token: {token_data.get('access_token')}")
-
-
-def cmd_auth_url(args):
-    """Generate and print the authorization URL."""
-    client_id, _ = get_client_credentials()
-    redirect_uri = f"http://127.0.0.1:{get_redirect_port()}/callback"
-
-    auth_params = {
-        "client_id": client_id,
-        "redirect_uri": redirect_uri,
-        "response_type": "code",
-        "scope": OAUTH_SCOPE,
-    }
-    auth_url = f"{OAUTH_BASE_URL}/authorize?{urlencode(auth_params)}"
-
-    print("\n" + "=" * 60)
-    print("Dida365 Authorization URL")
-    print("=" * 60)
-    print("\nOpen this URL in your browser:\n")
-    print(auth_url)
-    print("\nAfter authorization, you will be redirected to:")
-    print(f"{redirect_uri}?code=YOUR_AUTH_CODE")
-    print("\nCopy the 'code' parameter and run:")
-    print(f"  python scripts/dida_api.py exchange-code --code YOUR_AUTH_CODE")
-
-
 # ============================================================================
 # Project Commands
 # ============================================================================
@@ -730,14 +641,6 @@ def main():
     logout_parser = subparsers.add_parser("logout", help="Clear saved credentials")
     logout_parser.set_defaults(func=cmd_logout)
 
-    exchange_code_parser = subparsers.add_parser("exchange-code", help="Exchange authorization code for token")
-    exchange_code_parser.add_argument("--code", required=True, help="Authorization code from callback URL")
-    exchange_code_parser.add_argument("--show-token", action="store_true", help="Show the access token")
-    exchange_code_parser.set_defaults(func=cmd_exchange_code)
-
-    auth_url_parser = subparsers.add_parser("auth-url", help="Print the authorization URL")
-    auth_url_parser.set_defaults(func=cmd_auth_url)
-
     # Project commands
     proj_list = subparsers.add_parser("projects", help="List all projects")
     proj_list.set_defaults(func=cmd_projects)
@@ -837,7 +740,7 @@ def main():
         sys.exit(1)
 
     # Skip auth check for auth commands
-    if args.command in ("auth", "auth-status", "logout", "exchange-code", "auth-url"):
+    if args.command in ("auth", "auth-status", "logout"):
         args.func(args)
         return
 
