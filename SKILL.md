@@ -23,13 +23,40 @@ Get credentials from [Dida365 Developer Center](https://developer.dida365.com/ma
 
 ### 2. Authenticate
 
-First time usage will trigger OAuth flow automatically, or run:
+**Option A: Interactive (recommended for local development)**
 
 ```bash
 python scripts/dida_api.py auth
 ```
 
 This opens a browser for authorization, then saves the token locally.
+
+**Option B: Manual (for automated/headless environments)**
+
+1. Generate the authorization URL:
+   ```bash
+   python3 -c "
+   import os
+   from urllib.parse import urlencode
+   client_id = os.environ.get('DIDA_CLIENT_ID')
+   params = {
+       'client_id': client_id,
+       'redirect_uri': 'http://127.0.0.1:8765/callback',
+       'response_type': 'code',
+       'scope': 'tasks:read tasks:write'
+   }
+   print('https://dida365.com/oauth/authorize?' + urlencode(params))
+   "
+   ```
+
+2. Visit the URL in a browser, authorize, and copy the `code` from the redirect URL (the part after `code=`)
+
+3. Exchange the code for a token:
+   ```bash
+   python scripts/dida_api.py exchange-token <code>
+   ```
+
+> **Note:** The OAuth scope is `tasks:read tasks:write`. The `projects:read` and `projects:write` scopes are not supported by Dida365's API and will cause authorization to fail.
 
 ### 3. Use the API
 

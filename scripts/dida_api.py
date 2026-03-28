@@ -7,7 +7,8 @@ Automatic OAuth flow - just set DIDA_CLIENT_ID and DIDA_CLIENT_SECRET.
 Usage:
     python dida_api.py auth              # Run OAuth flow
     python dida_api.py auth-status       # Check authentication
-    python dida_api.py logout            # Clear credentials
+    python dida_api.py logout             # Clear credentials
+    python dida_api.py exchange-token <code>  # Manual token exchange
 
     python dida_api.py projects          # List projects
     python dida_api.py create-task ...   # Create task
@@ -48,7 +49,7 @@ TOKEN_FILE = CONFIG_DIR / "token.json"
 
 # OAuth Configuration
 DEFAULT_REDIRECT_PORT = 8765
-OAUTH_SCOPE = "tasks:read tasks:write projects:read projects:write"
+OAUTH_SCOPE = "tasks:read tasks:write"
 
 
 def get_client_credentials() -> tuple[str, str]:
@@ -445,6 +446,57 @@ def cmd_logout(args):
         print("No token file to delete.")
 
 
+def exchange_token(auth_code: str, client_id: str, client_secret: str, redirect_uri: str) -> dict:
+    """Exchange authorization code for access token."""
+    credentials = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+
+    body = urlencode({
+        "code": auth_code,
+        "grant_type": "authorization_code",
+        "scope": OAUTH_SCOPE,
+        "redirect_uri": redirect_uri,
+    })
+
+    req = urllib.request.Request(
+        f"{OAUTH_BASE_URL}/token",
+        data=body.encode(),
+        headers={
+            "Authorization": f"Basic {credentials}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8") if e.fp else ""
+        raise Exception(f"Token exchange failed: {error_body}")
+
+
+def cmd_exchange_token(args):
+    """Exchange authorization code for token (manual auth)."""
+    try:
+        client_id, client_secret = get_client_credentials()
+    except ValueError as e:
+        print(f"❌ {e}")
+        return
+
+    redirect_uri = f"http://127.0.0.1:{os.environ.get('DIDA_REDIRECT_PORT', '8765')}/callback"
+
+    print(f"Exchanging code: {args.code[:20]}...")
+    try:
+        token_data = exchange_token(args.code, client_id, client_secret, redirect_uri)
+        save_token(token_data, client_id)
+        print(f"✅ Token saved to: {TOKEN_FILE}")
+        print(f"   Access token: {token_data.get('access_token', '')[:20]}...")
+        print(f"   Expires in: {token_data.get('expires_in', 0)} seconds")
+    except Exception as e:
+        print(f"❌ {e}")
+        return
+
+
 # ============================================================================
 # Project Commands
 # ============================================================================
@@ -640,6 +692,11 @@ def main():
 
     logout_parser = subparsers.add_parser("logout", help="Clear saved credentials")
     logout_parser.set_defaults(func=cmd_logout)
+
+    # Manual token exchange
+    exchange_parser = subparsers.add_parser("exchange-token", help="Exchange auth code for token (manual auth)")
+    exchange_parser.add_argument("code", help="Authorization code from callback URL")
+    exchange_parser.set_defaults(func=cmd_exchange_token)
 
     # Project commands
     proj_list = subparsers.add_parser("projects", help="List all projects")
